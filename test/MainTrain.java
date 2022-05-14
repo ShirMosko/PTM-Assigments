@@ -6,6 +6,7 @@ import java.io.PrintWriter;
 import java.util.List;
 import java.util.Random;
 
+
 public class MainTrain {
 	
 	static Random r=new Random();
