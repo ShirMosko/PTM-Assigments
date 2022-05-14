@@ -64,7 +64,7 @@ public class MainTrain {
 	}
 	
 	
-	public static void main(String[] args) {
+	public static void main(String[] args)  {
 		float a1=1+r.nextInt(10), b1=-50+r.nextInt(100);
 		float a2=1+r.nextInt(20) , b2=-50+r.nextInt(100);
 

@@ -33,7 +33,7 @@ public class StatLib {
     public static float pearson(float[] x, float[] y){
         float cov_XY = cov(x, y);
         float stan_dev_x = (float) Math.sqrt(var(x)); //standard deviation of x
-        float stan_dev_y = (float) Math.sqrt(var(y)); //standard deviation of x
+        float stan_dev_y = (float) Math.sqrt(var(y)); //standard deviation of y
         return cov_XY / (stan_dev_x * stan_dev_y);
     }
 
