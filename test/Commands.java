@@ -16,7 +16,7 @@ public class Commands {
     // the default IO to be used in all commands
     DefaultIO dio;
 
-    private get_info_csv_file get_and_set_info = new get_info_csv_file();
+    private SharedState sharedState = new SharedState();
     public Commands(DefaultIO dio) {
         this.dio=dio;
     }
@@ -31,7 +31,7 @@ public class Commands {
     }
 
     // helper classes:
-    private class get_info_csv_file {
+    private class SharedState {
         private final SimpleAnomalyDetector anomalyDetector = new SimpleAnomalyDetector();
         private float currentThreshold = 0.9F;
         private TimeSeries trainTimeSeries;
@@ -93,28 +93,18 @@ public class Commands {
         ;
 
         public void writeToFile(String filename) throws IOException {
-            BufferedWriter pw = new BufferedWriter(new FileWriter(filename));
+            BufferedWriter write = new BufferedWriter(new FileWriter(filename));
             while (true) {
                 String info = dio.readText();
                 if (info.equalsIgnoreCase("done")) {
                     dio.write("Upload complete.\n");
                     break;
                 }
-                pw.write(String.format("%s\n",info));
+                write.write(String.format("%s\n",info));
             }
-            pw.close();
+            write.close();
         }
     }
-
-
-
-    // the shared state of all commands
-    private class SharedState{
-        // implement here whatever you need
-
-    }
-
-    private  SharedState sharedState=new SharedState();
 
 
     // Command abstract class
@@ -129,22 +119,22 @@ public class Commands {
     }
 
 
-    public class upload_time_series_csv_file extends Command{
+    public class UploadTimeSeriesCsvFile extends Command{
 
-        public upload_time_series_csv_file() {
+        public UploadTimeSeriesCsvFile() {
             super("upload a time series csv file");
         }
 
         @Override
         public void execute() throws IOException {
             dio.write(("Please upload your local train CSV file.\n"));
-            get_and_set_info.writeToFile("./trainAnomaly.csv");
-            get_and_set_info.setTrainTimeSeries(new TimeSeries("./trainAnomaly.csv"));
+            sharedState.writeToFile("./trainAnomaly.csv");
+            sharedState.setTrainTimeSeries(new TimeSeries("./trainAnomaly.csv"));
             dio.write("upload complete");
 
             dio.write("Please upload your local test CSV file.\n");
-            get_and_set_info.writeToFile("./testAnomaly.csv");
-            get_and_set_info.setTestTimeSeries(new TimeSeries("./testAnomaly.csv"));
+            sharedState.writeToFile("./testAnomaly.csv");
+            sharedState.setTestTimeSeries(new TimeSeries("./testAnomaly.csv"));
 
             dio.write("upload complete");
         }
@@ -167,7 +157,7 @@ public class Commands {
                     float newThreshold = Float.parseFloat(dio.readText());
                     if (!(newThreshold >= 0 && newThreshold <= 1))
                         throw new NumberFormatException();
-                    get_and_set_info.setCurrentThreshold(newThreshold);
+                    sharedState.setCurrentThreshold(newThreshold);
                     break;
                 } catch (NumberFormatException ex) {
                     dio.write("please choose a value between 0 and 1.\n");
@@ -184,8 +174,8 @@ public class Commands {
 
         @Override
         public void execute() {
-            get_and_set_info.getAnomalyDetector().learnNormal(get_and_set_info.getTrainTimeSeries());
-            get_and_set_info.setCurrentDetections(get_and_set_info.getAnomalyDetector().detect(get_and_set_info.getTestTimeSeries()));
+            sharedState.getAnomalyDetector().learnNormal(sharedState.getTrainTimeSeries());
+            sharedState.setCurrentDetections(sharedState.getAnomalyDetector().detect(sharedState.getTestTimeSeries()));
             dio.write("anomaly detection complete.\n");
         }
     }
@@ -198,7 +188,7 @@ public class Commands {
 
         @Override
         public void execute() {
-            for(AnomalyReport anomalyReport : get_and_set_info.currentDetections)
+            for(AnomalyReport anomalyReport : sharedState.currentDetections)
                 dio.write(anomalyReport.timeStep + "\t" + " " + anomalyReport.description + "\n");
             dio.write("Done.\n");
         }
@@ -281,15 +271,13 @@ public class Commands {
             List<Long[]>analyzeRanges = saveAllRanges();
             dio.write("Upload Comlete.\n");
 
-            Map<String, List<AnomalyReport>> detections = get_and_set_info.getCurrentDetections().stream().collect(Collectors.groupingBy(w ->w.description));
+            Map<String, List<AnomalyReport>> detections = sharedState.getCurrentDetections().stream().collect(Collectors.groupingBy(w ->w.description));
             List<Long[]> groupedRanges = unionRanges(detections);
             truePositive = getAllTruePositives(analyzeRanges, groupedRanges);
             falsePositive = groupedRanges.size()- truePositive;
-            int dataRowNumber = get_and_set_info.getTestTimeSeries().map.entrySet().iterator().next().getValue().size() - 1;
+            int dataRowNumber = sharedState.getTestTimeSeries().map.entrySet().iterator().next().getValue().size() - 1;
             WriteTP(truePositive, analyzeRanges.size());
             WriteFN(falsePositive, calNegativeRange(dataRowNumber, analyzeRanges));
-
-
         }
     }
 

@@ -17,7 +17,7 @@ public class CLI {
         c = new Commands(dio);
         commands = new ArrayList<>();
         //numbered by order 1-6
-        commands.add(c.new upload_time_series_csv_file());
+        commands.add(c.new UploadTimeSeriesCsvFile());
         commands.add(c.new algorithm_settings());
         commands.add(c.new detect_anomalies());
         commands.add(c.new display_results());
@@ -33,7 +33,7 @@ public class CLI {
             int count = 1;
             dio.write("Welcome to the Anomaly Detection Server.\\nPlease choose an option:\\n");
             for (Command command : commands) {
-                dio.write(command.description);
+                dio.write(String.format("%x. %s\n", count++, command.description));
                 count++;
             }
 
