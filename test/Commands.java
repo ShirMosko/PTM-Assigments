@@ -3,7 +3,6 @@ package test;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.time.temporal.ValueRange;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,22 +14,28 @@ public class Commands {
 
     // the default IO to be used in all commands
     DefaultIO dio;
-
     private SharedState sharedState = new SharedState();
+
     public Commands(DefaultIO dio) {
-        this.dio=dio;
+        this.dio = dio;
     }
 
+    // you may add other helper classes here
+
+
     // Default IO interface
-    public interface DefaultIO{
+    public interface DefaultIO {
         public String readText();
+
         public void write(String text);
+
         public float readVal();
+
         public void write(float val);
 
     }
 
-    // helper classes:
+    // the shared state of all commands
     private class SharedState {
         private final SimpleAnomalyDetector anomalyDetector = new SimpleAnomalyDetector();
         private float currentThreshold = 0.9F;
@@ -93,83 +98,84 @@ public class Commands {
         ;
 
         public void writeToFile(String filename) throws IOException {
-            BufferedWriter write = new BufferedWriter(new FileWriter(filename));
+            BufferedWriter pw = new BufferedWriter(new FileWriter(filename));
             while (true) {
-                String info = dio.readText();
-                if (info.equalsIgnoreCase("done")) {
+                String data = dio.readText();
+                if (data.equalsIgnoreCase("done")) {
                     dio.write("Upload complete.\n");
                     break;
                 }
-                write.write(String.format("%s\n",info));
+                pw.write(String.format("%s\n", data));
             }
-            write.close();
+            pw.close();
         }
     }
 
-
     // Command abstract class
-    public abstract class Command{
+    public abstract class Command {
         protected String description;
 
         public Command(String description) {
-            this.description=description;
+            this.description = description;
         }
 
         public abstract void execute() throws IOException;
     }
 
+    public class UploadTimeSeriesCsvFile extends Command {
 
-    public class UploadTimeSeriesCsvFile extends Command{
-
+        /**
+         * Command class for uploading a time series CSV file
+         */
         public UploadTimeSeriesCsvFile() {
             super("upload a time series csv file");
         }
 
         @Override
         public void execute() throws IOException {
-            dio.write(("Please upload your local train CSV file.\n"));
+            // User instruction
+            dio.write("Please upload your local train CSV file.\n");
+            // Read the train anomaly data
             sharedState.writeToFile("./trainAnomaly.csv");
             sharedState.setTrainTimeSeries(new TimeSeries("./trainAnomaly.csv"));
-            dio.write("upload complete");
-
+            // Read the test anomaly data
             dio.write("Please upload your local test CSV file.\n");
             sharedState.writeToFile("./testAnomaly.csv");
             sharedState.setTestTimeSeries(new TimeSeries("./testAnomaly.csv"));
-
-            dio.write("upload complete");
         }
     }
 
-    public class algorithm_settings extends Command{
+    public class ChangeAlgorithmSettings extends Command {
 
-        public algorithm_settings() {
-            super("Algorithm settings");
+        public ChangeAlgorithmSettings() {
+            super("algorithm settings");
         }
 
         @Override
         public void execute() {
-
-            dio.write("The current correlation threshold is 0.9\n" +
-                    "Type a new threshold");
-
+            dio.write(String.format("The current correlation threshold is %f\n", sharedState.currentThreshold));
+            dio.write("Type a new threshold\n");
             while (true) {
                 try {
                     float newThreshold = Float.parseFloat(dio.readText());
+                    // Validate that the new threshold is in the range of (0,1)
                     if (!(newThreshold >= 0 && newThreshold <= 1))
                         throw new NumberFormatException();
                     sharedState.setCurrentThreshold(newThreshold);
+                    // The new value is valid
                     break;
                 } catch (NumberFormatException ex) {
                     dio.write("please choose a value between 0 and 1.\n");
                 }
             }
+
         }
     }
 
-    public class detect_anomalies extends Command{
+    public class DetectAnomalies extends Command {
 
-        public detect_anomalies() {
-            super("Detect anomalies");
+        public DetectAnomalies() {
+            super("detect anomalies");
         }
 
         @Override
@@ -180,54 +186,56 @@ public class Commands {
         }
     }
 
-    public class display_results extends Command{
+    public class DisplayResults extends Command {
 
-        public display_results() {
-            super("Display results");
+        public DisplayResults() {
+            super("display results");
         }
 
         @Override
         public void execute() {
-            for(AnomalyReport anomalyReport : sharedState.currentDetections)
-                dio.write(anomalyReport.timeStep + "\t" + " " + anomalyReport.description + "\n");
+            for (AnomalyReport ar : sharedState.currentDetections)
+                dio.write(ar.timeStep + "\t" + " " + ar.description + '\n');
             dio.write("Done.\n");
         }
     }
 
-    public class upload_anomalies_and_analyze_results extends Command{
+    public class AnalyzeAnomalies extends Command {
 
-        public upload_anomalies_and_analyze_results() {
-            super("Upload anomalies and analyze results");
+        public AnalyzeAnomalies() {
+            super("upload anomalies and analyze results");
         }
 
-        private List<Long[]> saveAllRanges() {
-            List<Long[]> pairs = new ArrayList<>();
+        private List<Long[]> storeAllRanges() {
+            List<Long[]> lineRangePairs = new ArrayList<>();
             String range = dio.readText();
-
+            // Retrieve all user input line ranges
             while (!range.equals("done")) {
-                String[] split = range.split(",");
+                String[] splitter = range.split(",");
                 try {
-                    pairs.add(new Long[]{Long.parseLong(split[0]), Long.parseLong(split[1])});
+                    lineRangePairs.add(new Long[]{Long.parseLong(splitter[0]), Long.parseLong(splitter[1])});
                     range = dio.readText();
                 } catch (NullPointerException ex) {
+                    // Validate the format of the given range
                     dio.write("Invalid range format was given\n");
                 }
             }
-            return pairs;
+            return lineRangePairs;
         }
-        private int calNegativeRange(int originalRowNum, List<Long[]> analyzeLineRangePairs) {
+
+        private int calculateNegativeRange(int originalRowNum, List<Long[]> analyzeLineRangePairs) {
             int negativeCounter = originalRowNum;
             for (Long[] range : analyzeLineRangePairs)
                 negativeCounter -= (range[1] - range[0] + 1);
             return negativeCounter;
         }
 
-        //union Ranges By Description And Time step
-        private List<Long[]> unionRanges(Map<String, List<AnomalyReport>> detections)
-        {
+        private List<Long[]> groupRangesByDetections(Map<String, List<AnomalyReport>> groupedDetections) {
             List<Long[]> rowRanges = new ArrayList<>();
-            for (Map.Entry<String, List<AnomalyReport>> description : detections.entrySet()) {
+            for (Map.Entry<String, List<AnomalyReport>> description : groupedDetections.entrySet()) {
+                // Iterate over all AnomalyReport objects and get range of timesteps
                 List<AnomalyReport> currentReports = description.getValue();
+                // Append the first and last report row range
                 rowRanges.add(new Long[]{currentReports.get(0).timeStep, currentReports.get(currentReports.size() - 1).timeStep});
             }
             return rowRanges;
@@ -236,25 +244,25 @@ public class Commands {
         private float parseDoubleValue(float value) {
             String format = String.format("%f", value);
             String decimal = format.substring(format.lastIndexOf("."), format.lastIndexOf(".") + 4);
-            String EndNum = format.substring(0, format.indexOf('.')) + decimal;
+            String finalNum = format.substring(0, format.indexOf('.')) + decimal;
             // Important to parse to float since it rounds up the decimal points with zeros
-            return Float.parseFloat(EndNum);
+            return Float.parseFloat(finalNum);
         }
 
-        private void WriteTP(float truePositive, int positiveCounter) {
+        private void calculateTP(float truePositive, int positiveCounter) {
             dio.write("True Positive Rate: " + parseDoubleValue((truePositive / positiveCounter)) + '\n');
         }
 
-        private void WriteFN(float falsePositive, int negativeCounter) {
+        private void calculateFN(float falsePositive, int negativeCounter) {
             dio.write("False Positive Rate: " + parseDoubleValue((falsePositive / negativeCounter)) + '\n');
         }
 
-        private int getAllTruePositives(List<Long[]> analyzeLineRangePairs, List<Long[]> groupedRanges) {
+        private int getAllTruePositives(List<Long[]> analyzeLineRangePairs, List<Long[]> groupedRangesByDetections) {
             // Iterate over the given ranges and check if they were detected
             int truePositive = 0;
             for (Long[] requiredRange : analyzeLineRangePairs) {
                 ValueRange range = ValueRange.of(requiredRange[0], requiredRange[1]);
-                for (Long[] detectedRange : groupedRanges) {
+                for (Long[] detectedRange : groupedRangesByDetections) {
                     // Validate that there were true positives in the range
                     if ((int) LongStream.range(detectedRange[0], detectedRange[1]).filter(range::isValidValue).count() > 0)
                         truePositive++;
@@ -265,30 +273,37 @@ public class Commands {
 
         @Override
         public void execute() throws IOException {
-            dio.write("Please upload your local anomalies file");
-            float truePositive = 0 , falsePositive = 0;
-
-            List<Long[]>analyzeRanges = saveAllRanges();
-            dio.write("Upload Comlete.\n");
-
-            Map<String, List<AnomalyReport>> detections = sharedState.getCurrentDetections().stream().collect(Collectors.groupingBy(w ->w.description));
-            List<Long[]> groupedRanges = unionRanges(detections);
-            truePositive = getAllTruePositives(analyzeRanges, groupedRanges);
-            falsePositive = groupedRanges.size()- truePositive;
+            dio.write("Please upload your local anomalies file.\n");
+            float truePositive = 0, falsePositive = 0;
+            // Store all the ranges in a Map format of -> { start: end} inputted by the user
+            List<Long[]> analyzeLineRangePairs = storeAllRanges();
+            dio.write("Upload complete.\n");
+            // Group all the same detection descriptions together, format -> { description: List of AnomalyReport Objects}
+            Map<String, List<AnomalyReport>> groupedDetections =
+                    sharedState.getCurrentDetections()
+                            .stream()
+                            .collect(Collectors.groupingBy(w -> w.description));
+            // Store all the line ranges of the timeSteps in the detections in order to count true positives, format -> [[start,end], [start,end]]
+            List<Long[]> groupedRangesByDetections = groupRangesByDetections(groupedDetections);
+            truePositive = getAllTruePositives(analyzeLineRangePairs, groupedRangesByDetections);
+            // Get the false positives depending on the amount of positive ones that were found
+            falsePositive = groupedRangesByDetections.size() - truePositive;
+            // Remove 1 in order to not count the indexes row
             int dataRowNumber = sharedState.getTestTimeSeries().map.entrySet().iterator().next().getValue().size() - 1;
-            WriteTP(truePositive, analyzeRanges.size());
-            WriteFN(falsePositive, calNegativeRange(dataRowNumber, analyzeRanges));
+            calculateTP(truePositive, analyzeLineRangePairs.size());
+            calculateFN(falsePositive, calculateNegativeRange(dataRowNumber, analyzeLineRangePairs));
         }
     }
 
-    public class exit extends Command{
+    public class Exit extends Command {
 
-        public exit() {
-            super("Exit");
+        public Exit() {
+            super("exit");
         }
 
         @Override
         public void execute() {
+            // TODO: display results of detection
         }
     }
 
